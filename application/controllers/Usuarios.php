@@ -28,7 +28,7 @@ require APPPATH . 'libraries/Format.php';
  */
 class Usuarios extends REST_Controller {
 
-    public function obtener_usuario($id){
+    public function obtener_usuario_get($id){
         $this->load->model("/administracion/usuarios_model");
         $data = $this->usuarios_model->obtener_usuario($id);
         if (is_null($data)){
