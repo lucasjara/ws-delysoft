@@ -76,7 +76,7 @@ class Usuarios extends REST_Controller
         $this->load->model("/administracion/usuarios_model");
         $data = $this->usuarios_model->validar_usuario($usuario, $password);
         if ($data != null) {
-            $this->set_response(["S", "Credenciales Correctas"],
+            $this->set_response(["S", "Credenciales Correctas",$data[0]["ID"]],
                 REST_Controller::HTTP_OK); // OK (200) being the HTTP response code
         } else {
             $this->set_response(['N', 'Credenciales Incorrectas'],
@@ -170,25 +170,40 @@ class Usuarios extends REST_Controller
         $id_prod = $this->post('id_prod');
         $cantidad = $this->post('cantidad');
         $id_usuario = $this->post('id_usuario');
-        if ($id_prod == null || $cantidad == null || $id_usuario == null) {
-            $this->set_response(['N', 'Envie Todos los Datos Porfavor'], REST_Controller::HTTP_OK);
+        $observacion = $this->post('observacion');
+        if ($id_prod == null || $cantidad == null || $id_usuario == null || $observacion == null) {
+            $this->set_response(["N", "Envie Todos los Datos Porfavor"], REST_Controller::HTTP_OK);
         }
         // Necesitamos Obtener el Precio y el Local
         $this->load->model("/administracion/usuarios_model");
         $datos = $this->usuarios_model->obtener_info_producto($id_prod);
         if ($datos == null) {
-            $this->set_response(['N', 'Error Producto No encontrado'], REST_Controller::HTTP_OK);
+            $this->set_response(["N", "Error Producto No encontrado"], REST_Controller::HTTP_OK);
         }
         $precio = (int)$datos[0]->PRECIO;
         $id_local = (int)$datos[0]->LOCAL;
         $total = $precio * (int)$cantidad;
         // Creamos el encabezado y el detalle
-        $encabezado = $this->usuarios_model->crear_pedido_enc($id_usuario, $id_local, $total);
+        $encabezado = $this->usuarios_model->crear_pedido_enc($id_usuario, $id_local, $total,$observacion);
         if ($encabezado == null) {
-            $this->set_response(['N', 'Error al Crear Pedido'], REST_Controller::HTTP_OK);
+            $this->set_response(["N", "Error al Crear Pedido"], REST_Controller::HTTP_OK);
         }
         $detalle = $this->usuarios_model->crear_pedido_det($encabezado, $id_prod, $cantidad, $precio);
-        $this->set_response(["S", "Pedido Realizo con Exito"], REST_Controller::HTTP_OK);
-    }
 
+        $obtener_datos_pedido = $this->usuarios_model->obtener_datos_pedido($encabezado);
+        $this->set_response(["S", "Pedido Realizo con Exito",$obtener_datos_pedido], REST_Controller::HTTP_OK);
+    }
+    public function obtener_listado_historico_usuario_post(){
+        $id_usuario = $this->post('id');
+        if ($id_usuario == null) {
+            $this->set_response(["N", "Envie Todos los Datos Porfavor"], REST_Controller::HTTP_OK);
+        }
+        $this->load->model("/administracion/usuarios_model");
+        $datos = $this->usuarios_model->obtener_historico_pedidos_usuario($id_usuario);
+        if ($datos != null){
+            $this->set_response(["S", $datos], REST_Controller::HTTP_OK);
+        }else{
+            $this->set_response(["N", "Ningun Pedido Realizado"], REST_Controller::HTTP_OK);
+        }
+    }
 }
