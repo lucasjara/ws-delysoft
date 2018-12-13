@@ -76,7 +76,7 @@ class Usuarios extends REST_Controller
         $this->load->model("/administracion/usuarios_model");
         $data = $this->usuarios_model->validar_usuario($usuario, $password);
         if ($data != null) {
-            $this->set_response(["S", "Credenciales Correctas",$data[0]["ID"]],
+            $this->set_response(["S", "Credenciales Correctas", $data[0]["ID"]],
                 REST_Controller::HTTP_OK); // OK (200) being the HTTP response code
         } else {
             $this->set_response(['N', 'Credenciales Incorrectas'],
@@ -137,7 +137,9 @@ class Usuarios extends REST_Controller
                 $vertices = array();
                 for ($i = 0; $i < count($datos); $i++) {
                     if ($data == $datos[$i]->ID) {
-                        array_push($vertices, "" . $datos[$i]->LONGITUD . " " . $datos[$i]->LATITUD);
+                        $longitud = $datos[$i]->LONGITUD;
+                        $latitud = $datos[$i]->LATITUD;
+                        array_push($vertices, "" . $longitud . " " . $latitud);
                     }
                 }
                 $point = str_replace(',', '.', $point);
@@ -147,16 +149,17 @@ class Usuarios extends REST_Controller
                 }
             }
             if (!empty($zonas_existe)) {
+
                 $productos = $this->usuarios_model->obtener_productos_zonas($zonas_existe);
                 if ($productos != null) {
                     $this->set_response(["S", $productos],
                         REST_Controller::HTTP_OK); // OK (200) being the HTTP response code
                 } else {
-                    $this->set_response(["N", 'No existen productos disponibles de ningun Local'],
+                    $this->set_response(["N", 'Sin productos Disponibles.'],
                         REST_Controller::HTTP_OK); // OK (200) being the HTTP response code
                 }
             } else {
-                $this->set_response(['N', 'No se encuentra ningun local Disponible en tu Ubicacion'],
+                $this->set_response(['N', 'Sin Delyverys Disponibles.'],
                     REST_Controller::HTTP_OK); // (200) being the HTTP response code
             }
         } else {
@@ -171,6 +174,8 @@ class Usuarios extends REST_Controller
         $cantidad = $this->post('cantidad');
         $id_usuario = $this->post('id_usuario');
         $observacion = $this->post('observacion');
+        $longitud = $this->post('longitud');
+        $latitud = $this->post('latitud');
         if ($id_prod == null || $cantidad == null || $id_usuario == null || $observacion == null) {
             $this->set_response(["N", "Envie Todos los Datos Porfavor"], REST_Controller::HTTP_OK);
         }
@@ -183,26 +188,125 @@ class Usuarios extends REST_Controller
         $precio = (int)$datos[0]->PRECIO;
         $id_local = (int)$datos[0]->LOCAL;
         $total = $precio * (int)$cantidad;
+        $this->set_response(["N", $latitud], REST_Controller::HTTP_OK);
         // Creamos el encabezado y el detalle
-        $encabezado = $this->usuarios_model->crear_pedido_enc($id_usuario, $id_local, $total,$observacion);
+        $encabezado = $this->usuarios_model->crear_pedido_enc($id_usuario, $id_local, $total, $observacion, $longitud,
+            $latitud);
         if ($encabezado == null) {
             $this->set_response(["N", "Error al Crear Pedido"], REST_Controller::HTTP_OK);
         }
         $detalle = $this->usuarios_model->crear_pedido_det($encabezado, $id_prod, $cantidad, $precio);
-
         $obtener_datos_pedido = $this->usuarios_model->obtener_datos_pedido($encabezado);
-        $this->set_response(["S", "Pedido Realizo con Exito",$obtener_datos_pedido], REST_Controller::HTTP_OK);
+        $this->set_response(["S", "Pedido Realizo con Exito", $obtener_datos_pedido], REST_Controller::HTTP_OK);
     }
-    public function obtener_listado_historico_usuario_post(){
+
+    public function obtener_listado_historico_usuario_post()
+    {
         $id_usuario = $this->post('id');
         if ($id_usuario == null) {
             $this->set_response(["N", "Envie Todos los Datos Porfavor"], REST_Controller::HTTP_OK);
         }
         $this->load->model("/administracion/usuarios_model");
         $datos = $this->usuarios_model->obtener_historico_pedidos_usuario($id_usuario);
-        if ($datos != null){
+        if ($datos != null) {
             $this->set_response(["S", $datos], REST_Controller::HTTP_OK);
-        }else{
+        } else {
+            $this->set_response(["N", "Ningun Pedido Realizado"], REST_Controller::HTTP_OK);
+        }
+    }
+
+    public function obtener_pedidos_pendientes_repartidor_post()
+    {
+        $id_repartidor = $this->post('id');
+        if ($id_repartidor == null) {
+            $this->set_response(["N", "Envie Todos los Datos Porfavor"], REST_Controller::HTTP_OK);
+        }
+        $this->load->model("/administracion/usuarios_model");
+        $datos = $this->usuarios_model->obtener_pedidos_pendientes_repartidor($id_repartidor);
+        if ($datos != null) {
+            $this->set_response(["S", $datos], REST_Controller::HTTP_OK);
+        } else {
+            $this->set_response(["N", "Ningun Pedido Pendiente"], REST_Controller::HTTP_OK);
+        }
+    }
+
+    public function cambiar_estado_pedido_repartidor_post()
+    {
+        $id_pedido = $this->post('id_pedido');
+        $longitud = $this->post('longitud');
+        $latitud = $this->post('latitud');
+        $estado_pedido = $this->post('estado_pedido');
+        if ($id_pedido == null || $estado_pedido == null) {
+            $this->set_response(["N", "Envie Todos los Datos Porfavor"], REST_Controller::HTTP_OK);
+        }
+        $this->load->model("/administracion/usuarios_model");
+        switch ($estado_pedido) {
+            case "Enviado":
+                $this->usuarios_model->cambiar_estado_pedido($id_pedido, 4);
+                // Agregar Tracking a Pedido al realizar Cambio
+                $id_tracking_enc = $this->usuarios_model->agregar_tracking_pedido();
+                $this->usuarios_model->vincular_tracking_pedido($id_pedido, $id_tracking_enc);
+                $this->usuarios_model->agregar_tracking_pedido_detalle($id_tracking_enc, $longitud, $latitud, 4);
+                $this->set_response(["S", "En Camino"], REST_Controller::HTTP_OK);
+                break;
+            case "En Camino":
+                $this->usuarios_model->cambiar_estado_pedido($id_pedido, 10);
+                $id_tracking_enc = $this->usuarios_model->obtener_id_tracking_pedido($id_pedido);
+                $this->usuarios_model->agregar_tracking_pedido_detalle($id_tracking_enc, $longitud, $latitud, 10);
+                $this->set_response(["S", "En Destino"], REST_Controller::HTTP_OK);
+                break;
+            case "En Destino":
+                $this->usuarios_model->cambiar_estado_pedido($id_pedido, 5);
+                $id_tracking_enc = $this->usuarios_model->obtener_id_tracking_pedido($id_pedido);
+                $this->usuarios_model->agregar_tracking_pedido_detalle($id_tracking_enc, $longitud, $latitud, 5);
+                $this->set_response(["S", "Entregado"], REST_Controller::HTTP_OK);
+                break;
+            default:
+                $this->set_response(["N", "Estado No valido Cambio"], REST_Controller::HTTP_OK);
+                break;
+        }
+    }
+
+    public function actualizar_trancking_repartidor_post()
+    {
+        $id_pedido = $this->post('id_pedido');
+        $longitud = $this->post('longitud');
+        $latitud = $this->post('latitud');
+        if ($id_pedido == null || $longitud == null || $latitud == null) {
+            $this->set_response(["N", "Envie Todos los Datos Porfavor"], REST_Controller::HTTP_OK);
+        }
+        $this->load->model("/administracion/usuarios_model");
+        // Obtener BD
+        $estado_pedido = $this->post('estado_pedido');
+        switch ($estado_pedido) {
+            case "Enviado":
+                $this->usuarios_model->cambiar_estado_pedido($id_pedido, 4);
+                $this->set_response(["S", "En Camino"], REST_Controller::HTTP_OK);
+                break;
+            case "En Camino":
+                $this->usuarios_model->cambiar_estado_pedido($id_pedido, 10);
+                $this->set_response(["S", "En Destino"], REST_Controller::HTTP_OK);
+                break;
+            case "En Destino":
+                $this->usuarios_model->cambiar_estado_pedido($id_pedido, 5);
+                $this->set_response(["S", "Entregado"], REST_Controller::HTTP_OK);
+                break;
+            default:
+                $this->set_response(["N", "Estado No valido Cambio"], REST_Controller::HTTP_OK);
+                break;
+        }
+    }
+    public function obtener_listado_pedidos_activos_usuario_post()
+    {
+        $id_usuario = $this->post('id');
+        if ($id_usuario == null) {
+            $this->set_response(["N", "Envie Todos los Datos Porfavor"], REST_Controller::HTTP_OK);
+        }
+        $this->load->model("/administracion/usuarios_model");
+        $datos = $this->usuarios_model->obtener_listado_pedidos_usuario($id_usuario);
+        if ($datos != null) {
+            $this->set_response(["S", $datos], REST_Controller::HTTP_OK);
+        } else {
             $this->set_response(["N", "Ningun Pedido Realizado"], REST_Controller::HTTP_OK);
         }
     }
